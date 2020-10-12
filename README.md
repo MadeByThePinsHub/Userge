@@ -121,10 +121,8 @@ async def test_filter(message: Message):
   * Choose your [**MODE**](https://github.com/UsergeTeam/Userge#userge-modes-)
   * Then fill other **non-required** vars as relevent to your **MODE**
   * Finally **hit deploy** button
-
 * With Docker 🐳 
     - [**See Detailed Guide**](resources/radmeDocker.md)
-
 * With Git, Python and pip 🔧
   ```bash
   # clone the repo
