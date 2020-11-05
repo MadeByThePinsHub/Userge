@@ -34,13 +34,6 @@ _INIT_TASKS: List[asyncio.Task] = []
 _START_TIME = time.time()
 
 
-def _shutdown() -> None:
-    _LOG.info(_LOG_STR, 'received stop signal, cancelling tasks ...')
-    for task in asyncio.all_tasks():
-        task.cancel()
-    _LOG.info(_LOG_STR, 'all tasks cancelled !')
-
-
 async def _complete_init_tasks() -> None:
     if not _INIT_TASKS:
         return
@@ -77,8 +70,7 @@ class _AbstractUserge(Methods, RawClient):
         if hasattr(plg, '_init'):
             # pylint: disable=protected-access
             if asyncio.iscoroutinefunction(plg._init):
-                _INIT_TASKS.append(
-                    asyncio.get_event_loop().create_task(plg._init()))
+                _INIT_TASKS.append(self.loop.create_task(plg._init()))
         _LOG.debug(_LOG_STR, f"Imported {_IMPORTED[-1].__name__} Plugin Successfully")
 
     async def _load_plugins(self) -> None:
@@ -173,30 +165,43 @@ class Userge(_AbstractUserge):
 
     def begin(self, coro: Optional[Awaitable[Any]] = None) -> None:
         """ start userge """
-        loop = asyncio.get_event_loop()
-        loop.add_signal_handler(signal.SIGHUP, _shutdown)
-        loop.add_signal_handler(signal.SIGTERM, _shutdown)
-        run = loop.run_until_complete
+        lock = asyncio.Lock()
+        running_tasks: List[asyncio.Task] = []
+
+        async def _finalize() -> None:
+            async with lock:
+                for task in running_tasks:
+                    task.cancel()
+                if self.is_initialized:
+                    await self.stop()
+                # pylint: disable=expression-not-assigned
+                [t.cancel() for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+                await self.loop.shutdown_asyncgens()
+                self.loop.stop()
+                _LOG.info(_LOG_STR, "Loop Stopped !")
+
+        async def _shutdown(sig: signal.Signals) -> None:
+            _LOG.info(_LOG_STR, f"Received Stop Signal [{sig.name}], Exiting Userge ...")
+            await _finalize()
+
+        for sig in (signal.SIGHUP, signal.SIGTERM, signal.SIGINT):
+            self.loop.add_signal_handler(
+                sig, lambda sig=sig: self.loop.create_task(_shutdown(sig)))
+        self.loop.run_until_complete(self.start())
+        for task in self._tasks:
+            running_tasks.append(self.loop.create_task(task()))
+        logbot.edit_last_msg("Userge has Started Successfully !")
+        logbot.end()
         try:
-            run(self.start())
-            running_tasks: List[asyncio.Task] = []
-            for task in self._tasks:
-                running_tasks.append(loop.create_task(task()))
             if coro:
                 _LOG.info(_LOG_STR, "Running Coroutine")
-                run(coro)
+                self.loop.run_until_complete(coro)
             else:
                 _LOG.info(_LOG_STR, "Idling Userge")
-                logbot.edit_last_msg("Userge has Started Successfully !")
-                logbot.end()
                 idle()
-            _LOG.info(_LOG_STR, "Exiting Userge")
-            for task in running_tasks:
-                task.cancel()
-            run(self.stop())
-            run(loop.shutdown_asyncgens())
-        except asyncio.exceptions.CancelledError:
+            self.loop.run_until_complete(_finalize())
+        except (asyncio.exceptions.CancelledError, RuntimeError):
             pass
         finally:
-            if not loop.is_running():
-                loop.close()
+            self.loop.close()
+            _LOG.info(_LOG_STR, "Loop Closed !")

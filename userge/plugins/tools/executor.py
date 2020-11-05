@@ -16,8 +16,6 @@ import traceback
 from getpass import getuser
 from os import geteuid
 
-from pyrogram.errors.exceptions.bad_request_400 import MessageNotModified
-
 from userge import userge, Message, Config
 from userge.utils import runcmd
 
@@ -52,8 +50,9 @@ async def eval_(message: Message):
         head = "async def __aexec(userge, message):\n "
         if '\n' in code:
             rest_code = '\n '.join(iter(code.split('\n')))
-        elif any(True for k_ in keyword.kwlist
-                 if k_ not in ('True', 'False', 'None') and code.startswith(f"{k_} ")):
+        elif (any(True for k_ in keyword.kwlist
+                  if k_ not in ('True', 'False', 'None') and code.startswith(f"{k_} "))
+              or '=' in code):
             rest_code = f"\n {code}"
         else:
             rest_code = f"\n return {code}"
@@ -71,7 +70,7 @@ async def eval_(message: Message):
     output = ""
     if not silent_mode:
         output += f"**>** ```{cmd}```\n\n"
-    if evaluation:
+    if evaluation is not None:
         output += f"**>>** ```{evaluation}```"
     if output:
         await message.edit_or_send_as_file(text=output,
@@ -143,11 +142,8 @@ async def term_(message: Message):
             out_data = f"<pre>{output}{t_obj.read_line}</pre>"
             await message.try_to_edit(out_data, parse_mode='html')
     out_data = f"<pre>{output}{t_obj.get_output}</pre>"
-    try:
-        await message.edit_or_send_as_file(
-            out_data, parse_mode='html', filename="term.txt", caption=cmd)
-    except MessageNotModified:
-        pass
+    await message.edit_or_send_as_file(
+        out_data, parse_mode='html', filename="term.txt", caption=cmd)
 
 
 async def init_func(message: Message):
