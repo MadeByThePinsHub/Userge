@@ -34,7 +34,7 @@ speedtest-cli
 stagger
 telegraph
 tgcrypto
-urbandict==0.5
+urbandict==0.6.1
 wget
 wikipedia
 youtube_dl>=2020.09.20
