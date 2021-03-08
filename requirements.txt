@@ -16,7 +16,7 @@ instaloader
 motor
 natsort
 oauth2client
-Pillow==7.1.0
+Pillow==8.1.2
 psutil
 pybase64
 pyrogram>=1.0.7
